@@ -74,6 +74,13 @@ struct parity_places
 	bool      last_block;
 };
 
+struct recover_stripe
+{
+    int         quantity;
+    int         read_dev[MAX_SYNDROMES];
+    sector_t    read_sector[MAX_SYNDROMES];
+};
+
 // RAID algorithm descriptor
 #define ALG_NAME_LEN 20
 struct insane_algorithm 
@@ -86,6 +93,7 @@ struct insane_algorithm
 
 	struct parity_places (*map)(struct insane_c *ctx, u64 block, sector_t *sector, int *device_number);
 	int (*configure)(struct insane_c *ctx);
+        struct recover_stripe (*recover)(struct insane_c *ctx, u64 block, int device_number);
 	struct module *module;
 	struct list_head list;
 };

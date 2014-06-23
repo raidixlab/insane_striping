@@ -13,6 +13,7 @@ struct insane_algorithm raid6e_alg = {
 	.e_blocks = 1,
 	.map = algorithm_raid6e,
 	.configure = raid6e_configure,
+        .recover = raid6e_recover,
 	.module = THIS_MODULE
 };
 
@@ -148,6 +149,30 @@ static struct parity_places algorithm_raid6e( struct insane_c *ctx, u64 block, s
 	parity.device_number[2] = -1;
 	return parity;
 }
+
+static struct recover_stripe raid6e_recover(struct insane_c *ctx, u64 block, int device_number) {
+    struct recover_stripe result;
+    struct block_place read_place;
+
+    int total_disks, chunk_size;
+    u64 position, device_length;
+
+    total_disks = raid6e_alg.ndisks;
+    chunk_size = ctx->chunk_size;
+    device_length = ctx->ti->len;
+
+    position = total_disks * block + device_number;
+
+    read_place = get_degraded_block(position, total_disks, chunk_size, device_length);
+
+    result.read_sector[0] = read_place.sector;
+    result.read_device[0] = read_place.device_number;
+
+    result.quantity = 1;
+
+    return result;
+}
+
 
 static int raid6e_configure( struct insane_c *ctx )
 {

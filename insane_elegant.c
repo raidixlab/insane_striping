@@ -15,6 +15,7 @@ struct insane_algorithm elegant_alg = {
 	.e_blocks   = E_BLOCKS,
 	.stripe_blocks = (SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1,
 	.map        = algorithm_elegant,
+        .recover    = elegant_recover,
 	.configure  = elegant_configure,
     	.module     = THIS_MODULE
 };
@@ -130,6 +131,95 @@ static struct parity_places algorithm_elegant( struct insane_c *ctx, u64 block, 
 	*sector = lane_pos * block_size + i;
 	
 	return parity;
+}
+
+
+// WITH EMPTY
+/*
+static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, int device_number) {
+    struct recover_stripe result;
+    
+    int total_disks;
+    u64 chunk_size, stripe_number, read_sector;
+
+    total_disks = elegant_alg.ndisks;
+    chunk_size = ctx->chunk_size;
+
+    // calculating stripe number
+    stripe_number = block * total_disks + device_number;
+    sector_div(stripe_number, elegant_alg.stripe_blocks);
+    
+    read_sector = stripe_number * stripe_blocks + total_disks - 1;
+    result.read_device[0] = sector_div(read_sector, total_disks);
+    read_sector *= chunk_size;
+    
+    result.read_sector[0] = read_sector;
+   
+    result.quantity = 1;
+
+    return result;
+}
+*/
+
+// WITHOUT EMPTY
+static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, int device_number) {
+    struct recover_stripe result;
+    
+    int total_disks, i, j, substripe_number, block_in_stripe;
+    u64 chunk_size, stripe_number, read_sector, sector;
+
+    total_disks = elegant_alg.ndisks;
+    chunk_size = ctx->chunk_size;
+
+    // calculating stripe number
+    stripe_number = block * total_disks + device_number;
+    block_in_stripe = sector_div(stripe_number, elegant_alg.stripe_blocks);
+    
+    // GLOBAL SYNDROME case
+    if (block_in_stripe == elegant_alg.stripe_blocks - 1) {
+        substripe_number = 0;
+        for (i = 0; i < elegant_alg.stripe_blocks - 1 - SUBSTRIPES; i++) {
+            // calculating substripe number for current block
+            substripe_number += i;
+            sector_div(substripe_number, SUBSTRIPE_DATA);
+
+            // calculating some other shit
+            sector = stripe_number * elegant_alg.stripe_blocks + i + substripe_number;
+            result.read_device[i] = sector_div(sector, total_disks);
+
+            result.read_sector[i] = sector * chunk_size;
+        }
+
+        result.quantity = elegant_alg.stripe_blocks - 1 - SUBSTRIPES;
+
+        return result;
+    }
+    
+    // other cases
+
+    substripe_number = 0;
+
+    while true {
+        if (block_in_stripe < (substripe_number + 1) * SUBSTRIPE_DATA)
+            break;
+        substripe_number++;
+    }
+
+    i = 0;
+    j = 0;
+    while (i < (substripe_number + 1) * SUBSTRIPE_DATA) {
+        if (i + (substripe_number + 1) * SUBSTRIPE_DATA != block_in_stripe) {
+            sector = stripe_number * elegant_alg.stripe_blocks + i + (substripe_number + 1) * SUBSTRIPE_DATA;
+            result.read_device[j] = sector_div(sector, total_disks);
+            result.read_sector[j] = sector * chunk_size;
+            j++;
+        }
+        i++;
+    }
+
+    result.quantity = SUBSTRIPE_DATA;
+
+    return result;
 }
 
 static int elegant_configure( struct insane_c *ctx )

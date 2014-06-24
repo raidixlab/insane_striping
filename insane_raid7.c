@@ -112,19 +112,21 @@ static struct recover_stripe raid7_recover(struct insane_c *ctx, u64 block, int 
     block_place = sector_div(onotole, total_disks);
 
     // starting block
-    onotole = total_disks - block;
+    onotole = block;
     device = sector_div(onotole, total_disks);
+    device = total_disks - device;
 
     counter = 0;
     // we should read (total_disks - 3) blocks to recover
     while (counter < total_disks - 3) {
-        if (device != block_place) {
+        if (device != device_number) {
             result.read_sector[counter] = block * chunk_size;
             result.read_device[counter] = device;
             counter++;
         }
         device++;
-        sector_div(device, total_disks);
+        onotole = sector_div(device, total_disks);
+        device = onotole;
     }
     
     result.quantity = total_disks - 3;

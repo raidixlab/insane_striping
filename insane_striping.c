@@ -58,18 +58,20 @@ static void insane_recover(struct insane_c *ctx) {
     sector_div(blocks_quantity, ctx->chunk_size);
     
     device_number = ctx->recovering_disk;
-
+	
     bi_size = ctx->chunk_size_bytes;
     bi_vcnt = ctx->chunk_size_pages;
 
     for (i = 0; i < blocks_quantity; i++) {
 
         read_blocks = ctx->alg->recover(ctx, i, device_number);
-        for ( j = 0; j < read_blocks.quantity; j++) {
+        for ( j = 0; j < 1; j++) {// read_blocks.quantity; j++) {
             do_bio(read_blocks.read_sector[j], ctx->devs[read_blocks.read_device[j]].dev->bdev, bi_size, bi_vcnt, READ);
+//		printk("Read: device %d, sector %lld\n", read_blocks.read_device[j], read_blocks.read_sector[j]);
         }
 
         do_bio(i * ctx->chunk_size, ctx->devs[device_number].dev->bdev, bi_size, bi_vcnt, WRITE);
+	//printk("Write: device %d, sector %lld, bi_size %lld, bi_vcnt %d\n", device_number, i*ctx->chunk_size, bi_size, bi_vcnt);
     }
 }
 
@@ -455,10 +457,10 @@ static void do_bio( sector_t sector, struct block_device *bdev, int bi_size, int
 	struct page *parity_page;
 
 	int page_counter;
-	int cur_len;
-	int bio_added;
+	//int cur_len;
+	//int bio_added;
 
-	bool remaining=true;
+	//bool remaining=true;
 
 	
 	bio = bio_alloc(GFP_NOIO, bi_vcnt);
@@ -673,7 +675,7 @@ static int insane_map(struct dm_target *ti, struct bio *bio)
 	// Don't forget to change device.
 	bio->bi_bdev = sc->devs[dev_index].dev->bdev;
 
-	if( bio->bi_rw & WRITE )
+	/*if( bio->bi_rw & WRITE )
 	{
 		if( sc->io_pattern == SEQUENTIAL ) {
 		if (syndromes.last_block == true)
@@ -683,7 +685,7 @@ static int insane_map(struct dm_target *ti, struct bio *bio)
 			insane_finish_syndromes(bio, &syndromes, sc);
 	}
 
-	dm_debug("bi_sector: %lld\n", (u64)bio->bi_sector);
+	dm_debug("bi_sector: %lld\n", (u64)bio->bi_sector);*/
 	return DM_MAPIO_REMAPPED;
 }
 

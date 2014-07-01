@@ -150,7 +150,10 @@ static struct recover_stripe raid6_recover(struct insane_c *ctx, u64 block, int 
     // starting block
     onotole = block;
     device = sector_div(onotole, total_disks);
-    device = total_disks - device;
+    if (device != 0)
+        device = total_disks - device;
+    else
+        device = 0;
 
     counter = 0;
     // we should read (total_disks - 2) blocks to recover

@@ -15,6 +15,8 @@
 
 #include <linux/device-mapper.h>
 
+#include <linux/time.h>
+
 #include "insane.h"
 
 // Driver parameter
@@ -54,6 +56,9 @@ static void insane_recover(struct insane_c *ctx) {
     int j, device_number, bi_vcnt;
     sector_t bi_size;
 
+    unsigned long start_time, finish_time, difference;
+    struct timeval tv;
+
     blocks_quantity = ctx->dev_width;
     sector_div(blocks_quantity, ctx->chunk_size);
     
@@ -62,17 +67,28 @@ static void insane_recover(struct insane_c *ctx) {
     bi_size = ctx->chunk_size_bytes;
     bi_vcnt = ctx->chunk_size_pages;
 
+    do_gettimeofday(&tv);
+    start_time = tv.tv_sec;
+
     for (i = 0; i < blocks_quantity; i++) {
 
         read_blocks = ctx->alg->recover(ctx, i, device_number);
-        for ( j = 0; j < 1; j++) {// read_blocks.quantity; j++) {
+        for ( j = 0; j < read_blocks.quantity; j++) {
             do_bio(read_blocks.read_sector[j], ctx->devs[read_blocks.read_device[j]].dev->bdev, bi_size, bi_vcnt, READ);
-//		printk("Read: device %d, sector %lld\n", read_blocks.read_device[j], read_blocks.read_sector[j]);
+            //printk("Read: device %d, sector %lld\n", read_blocks.read_device[j], read_blocks.read_sector[j]);
         }
 
         do_bio(i * ctx->chunk_size, ctx->devs[device_number].dev->bdev, bi_size, bi_vcnt, WRITE);
 	//printk("Write: device %d, sector %lld, bi_size %lld, bi_vcnt %d\n", device_number, i*ctx->chunk_size, bi_size, bi_vcnt);
     }
+    do_gettimeofday(&tv);
+    finish_time = tv.tv_sec;
+    difference = finish_time - start_time;
+
+    blocks_quantity = ctx->dev_width;
+    sector_div(blocks_quantity, 2048);// Megabytes
+    
+    printk("Recovered %lld MegaBytes in %ld seconds\n", blocks_quantity, difference);
 }
 
 
@@ -675,7 +691,7 @@ static int insane_map(struct dm_target *ti, struct bio *bio)
 	// Don't forget to change device.
 	bio->bi_bdev = sc->devs[dev_index].dev->bdev;
 
-	/*if( bio->bi_rw & WRITE )
+	if( bio->bi_rw & WRITE )
 	{
 		if( sc->io_pattern == SEQUENTIAL ) {
 		if (syndromes.last_block == true)
@@ -685,7 +701,7 @@ static int insane_map(struct dm_target *ti, struct bio *bio)
 			insane_finish_syndromes(bio, &syndromes, sc);
 	}
 
-	dm_debug("bi_sector: %lld\n", (u64)bio->bi_sector);*/
+	dm_debug("bi_sector: %lld\n", (u64)bio->bi_sector);
 	return DM_MAPIO_REMAPPED;
 }
 

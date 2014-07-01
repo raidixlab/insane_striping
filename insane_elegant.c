@@ -4,6 +4,7 @@
 
 static struct parity_places algorithm_elegant( struct insane_c *ctx, u64 block, sector_t *sector, int *device_number );
 static int elegant_configure( struct insane_c *ctx );
+static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, int device_number);
 
 #define SUBSTRIPES 2      // Substripes in virtual stripe
 #define SUBSTRIPE_DATA 5  // Substripe length without parity
@@ -166,7 +167,7 @@ static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, in
     struct recover_stripe result;
     
     int total_disks, i, j, substripe_number, block_in_stripe;
-    u64 chunk_size, stripe_number, read_sector, sector;
+    u64 chunk_size, stripe_number, sector;
 
     total_disks = elegant_alg.ndisks;
     chunk_size = ctx->chunk_size;
@@ -199,7 +200,7 @@ static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, in
 
     substripe_number = 0;
 
-    while true {
+    while (true) {
         if (block_in_stripe < (substripe_number + 1) * SUBSTRIPE_DATA)
             break;
         substripe_number++;

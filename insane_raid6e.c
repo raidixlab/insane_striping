@@ -4,6 +4,7 @@
 
 static struct parity_places algorithm_raid6e( struct insane_c *ctx, u64 block, sector_t *sector, int *device_number );
 static int raid6e_configure( struct insane_c *ctx );
+static struct recover_stripe raid6e_recover(struct insane_c *ctx, u64 block, int device_number);
 
 #define DEGRADED_DISK 1
 

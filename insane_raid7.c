@@ -3,6 +3,7 @@
 
 static struct parity_places algorithm_raid7( struct insane_c *ctx, u64 block, sector_t *sector, int *device_number );
 static int raid7_configure( struct insane_c *ctx );
+static struct recover_stripe raid7_recover(struct insane_c *ctx, u64 block, int device_number);
 
 struct insane_algorithm raid7_alg = {
 	.name = "raid7",
@@ -99,23 +100,36 @@ static struct parity_places algorithm_raid7(struct insane_c *ctx, u64 block, sec
 static struct recover_stripe raid7_recover(struct insane_c *ctx, u64 block, int device_number) {
     struct recover_stripe result;
 
-    int block_place, counter, device, total_disks;
+    int block_place, counter, device, total_disks, chunk_size;
+    
+    u64 onotole;
+
+    total_disks = raid7_alg.ndisks;
+    chunk_size = ctx->chunk_size;
 
     // place of block in current stripe
-    block_place = (block + device_number) % total_disks;
+    onotole = block + device_number;
+    block_place = sector_div(onotole, total_disks);
 
     // starting block
-    device = (total_disks - block) % total_disks;
+    onotole = block;
+    device = sector_div(onotole, total_disks);
+    if (device != 0)
+        device = total_disks - device;
+    else
+        device = 0;
 
     counter = 0;
     // we should read (total_disks - 3) blocks to recover
     while (counter < total_disks - 3) {
-        if (device != block_place) {
+        if (device != device_number) {
             result.read_sector[counter] = block * chunk_size;
             result.read_device[counter] = device;
             counter++;
         }
-        device = (device + 1) % total_disks;
+        device++;
+        onotole = sector_div(device, total_disks);
+        device = onotole;
     }
     
     result.quantity = total_disks - 3;

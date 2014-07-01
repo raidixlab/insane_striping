@@ -15,6 +15,8 @@
 
 #include <linux/device-mapper.h>
 
+#include <linux/time.h>
+
 #include "insane.h"
 
 // Driver parameter
@@ -24,6 +26,7 @@ int debug = 0;
 LIST_HEAD(alg_list);
 DEFINE_SPINLOCK(alg_list_lock);
 
+static void do_bio( sector_t sector, struct block_device *bdev, int bi_size, int bi_vcnt, int rw );
 /*
  * An event is triggered whenever a drive drops out of a stripe volume.
  */
@@ -46,9 +49,52 @@ static inline struct insane_c *alloc_context(unsigned int ndev)
 	return kmalloc(len, GFP_KERNEL);
 }
 
+static void insane_recover(struct insane_c *ctx) {
+    struct recover_stripe read_blocks;
+
+    u64 i, blocks_quantity;
+    int j, device_number, bi_vcnt;
+    sector_t bi_size;
+
+    unsigned long start_time, finish_time, difference;
+    struct timeval tv;
+
+    blocks_quantity = ctx->dev_width;
+    sector_div(blocks_quantity, ctx->chunk_size);
+    
+    device_number = ctx->recovering_disk;
+	
+    bi_size = ctx->chunk_size_bytes;
+    bi_vcnt = ctx->chunk_size_pages;
+
+    do_gettimeofday(&tv);
+    start_time = tv.tv_sec;
+
+    for (i = 0; i < blocks_quantity; i++) {
+
+        read_blocks = ctx->alg->recover(ctx, i, device_number);
+        for ( j = 0; j < read_blocks.quantity; j++) {
+            do_bio(read_blocks.read_sector[j], ctx->devs[read_blocks.read_device[j]].dev->bdev, bi_size, bi_vcnt, READ);
+            //printk("Read: device %d, sector %lld\n", read_blocks.read_device[j], read_blocks.read_sector[j]);
+        }
+
+        do_bio(i * ctx->chunk_size, ctx->devs[device_number].dev->bdev, bi_size, bi_vcnt, WRITE);
+	//printk("Write: device %d, sector %lld, bi_size %lld, bi_vcnt %d\n", device_number, i*ctx->chunk_size, bi_size, bi_vcnt);
+    }
+    do_gettimeofday(&tv);
+    finish_time = tv.tv_sec;
+    difference = finish_time - start_time;
+
+    blocks_quantity = ctx->dev_width;
+    sector_div(blocks_quantity, 2048);// Megabytes
+    
+    printk("Recovered %lld MegaBytes in %ld seconds\n", blocks_quantity, difference);
+}
+
+
 /*
  * Construct a insane mapping.
- * <algorithm name> <io_pattern> <number of devices> <chunk size> [<dev_path>]+
+ * <algorithm name> <number of devices> <chunk size> <io_pattern> [<dev_path>]+
  */
 static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 {
@@ -59,11 +105,12 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	int ndev;
 	int chunk_size;
 	int io_pattern;
+        int recovering;
 	int r = -ENXIO;
 	int i;
 	char *end;
 
-	if (argc < 4) {
+	if (argc < 5) {
 		ti->error = "Not enough arguments";
 		return -EINVAL;
 	}
@@ -94,9 +141,24 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		return -EINVAL;
 	}
 
+
+	ndev = simple_strtoul( argv[1], &end, 10 );
+	if ( *end || !ndev) {
+		ti->error = "Invalid device count";
+		return -EINVAL;
+	}
+	dm_debug("ndev = %d\n", ndev);
+
+	chunk_size = simple_strtoul( argv[2], &end, 10 );
+	if ( *end || !chunk_size) {
+		ti->error = "Invalid chunk_size";
+		return -EINVAL;
+	}
+	dm_debug("chunk_size is %d sectors, %d KiB\n", chunk_size, chunk_size / 2);
+
 	for( i = 0; i < IO_PATTERN_NUM; i++ )
 	{
-		if( !strncmp( argv[1], io_patterns[i], ALG_NAME_LEN ) ) {
+		if( !strncmp( argv[3], io_patterns[i], ALG_NAME_LEN ) ) {
 			io_pattern = i;
 		break;
 	}
@@ -107,19 +169,18 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		return -EINVAL;
 	}
 
-	ndev = simple_strtoul( argv[2], &end, 10 );
-	if ( *end || !ndev) {
-		ti->error = "Invalid device count";
+        if ( io_pattern == IO_PATTERN_NUM - 1) { // recover mode
+            i = 1;
+            recovering = simple_strtoul( argv[4], &end, 10 ); // Why 10?
+            if ( *end || !recovering) {
+		ti->error = "Invalid recovering disk";
 		return -EINVAL;
-	}
-	dm_debug("ndev = %d\n", ndev);
+	    }
+        } else {
+            i = 0;
+            recovering = 0;
+        }
 
-	chunk_size = simple_strtoul( argv[3], &end, 10 );
-	if ( *end || !chunk_size) {
-		ti->error = "Invalid chunk_size";
-		return -EINVAL;
-	}
-	dm_debug("chunk_size is %d sectors, %d KiB\n", chunk_size, chunk_size / 2);
 
 	if (chunk_size & (chunk_size - 1)) {
 		ti->error = "Chunk size should be a power of 2";
@@ -135,7 +196,7 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	dm_debug("Each disk width is %llu sectors\n", (u64)width);
 
 	// Do we have enough arguments for that many devices ?
-	if (argc != (4 + ndev)) {
+	if (argc != (4 + i + ndev)) {
 		ti->error = "Not enough destinations specified";
 		return -EINVAL;
 	}
@@ -149,6 +210,7 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 
 	sc->ti = ti;
 	sc->io_pattern = io_pattern;
+        sc->recovering_disk = recovering;
 	sc->ndev = ndev;
 	sc->dev_width = width;
 
@@ -218,7 +280,7 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 #endif
 
 	dm_debug("Opening devices\n");
-	argv += 4;
+	argv += (4 + i);
 	for (i = 0; i < ndev; i++) 
 	{
 		if (dm_get_device(ti, argv[i], dm_table_get_mode(ti->table), &sc->devs[i].dev))
@@ -239,8 +301,10 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	dm_log("Insane constructor: %u devices, %lld device width, %u chunk size\n", 
 		sc->ndev, (u64)sc->dev_width, sc->chunk_size);
 
+        insane_recover(sc);
 	return 0;
 }
+
 
 static void insane_dtr(struct dm_target *ti)
 {
@@ -357,8 +421,8 @@ static int insane_map_special(struct insane_c *sc, struct bio *bio
 		target_request_nr = dm_bio_get_target_request_nr(bio);
 #else
 #if LINUX_VERSION_CODE > KERNEL_VERSION( 3, 8, 0 )
-		target_request_nr = dm_bio_get_target_bio_nr(bio);
-		//target_request_nr = dm_bio_get_target_request_nr(bio);
+		//target_request_nr = dm_bio_get_target_bio_nr(bio);
+		target_request_nr = dm_bio_get_target_request_nr(bio);
 #else // <= 3.7
 		target_request_nr = map_context->target_request_nr;
 #endif
@@ -379,8 +443,8 @@ static int insane_map_special(struct insane_c *sc, struct bio *bio
 		target_request_nr = dm_bio_get_target_request_nr(bio);
 #else
 #if LINUX_VERSION_CODE > KERNEL_VERSION( 3, 8, 0 )
-		target_request_nr = dm_bio_get_target_bio_nr(bio);
-		//target_request_nr = dm_bio_get_target_request_nr(bio);
+		//target_request_nr = dm_bio_get_target_bio_nr(bio);
+		target_request_nr = dm_bio_get_target_request_nr(bio);
 #else // <= 3.7
 		target_request_nr = map_context->target_request_nr;
 #endif
@@ -409,10 +473,10 @@ static void do_bio( sector_t sector, struct block_device *bdev, int bi_size, int
 	struct page *parity_page;
 
 	int page_counter;
-	int cur_len;
-	int bio_added;
+	//int cur_len;
+	//int bio_added;
 
-	bool remaining=true;
+	//bool remaining=true;
 
 	
 	bio = bio_alloc(GFP_NOIO, bi_vcnt);

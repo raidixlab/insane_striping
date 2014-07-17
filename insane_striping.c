@@ -75,17 +75,9 @@ static void insane_recover(struct insane_c *ctx) {
         read_blocks = ctx->alg->recover(ctx, i, device_number);
         for ( j = 0; j < read_blocks.quantity; j++) {
             do_bio(read_blocks.read_sector[j], ctx->devs[read_blocks.read_device[j]].dev->bdev, bi_size, bi_vcnt, READ);
-<<<<<<< HEAD
         }
         if (read_blocks.write_device != -1)  // may be it is empty block
             do_bio(read_blocks.write_sector, ctx->devs[read_blocks.write_device].dev->bdev, bi_size, bi_vcnt, WRITE);
-=======
-            //printk("Read: device %d, sector %lld\n", read_blocks.read_device[j], read_blocks.read_sector[j]);
-        }
-
-        do_bio(i * ctx->chunk_size, ctx->devs[device_number].dev->bdev, bi_size, bi_vcnt, WRITE);
-	//printk("Write: device %d, sector %lld, bi_size %lld, bi_vcnt %d\n", device_number, i*ctx->chunk_size, bi_size, bi_vcnt);
->>>>>>> a65803664c6e0031eb3faa41911f98c5aed80f92
     }
     do_gettimeofday(&tv);
     finish_time = tv.tv_sec;

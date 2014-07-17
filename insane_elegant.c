@@ -5,6 +5,10 @@
 static struct parity_places algorithm_elegant( struct insane_c *ctx, u64 block, sector_t *sector, int *device_number );
 static int elegant_configure( struct insane_c *ctx );
 
+static struct recover_stripe recover_from_stripe_to_empty(struct insane_c *ctx, u64 block, int device_number);
+static struct recover_stripe recover_from_empty_to_new(struct insane_c *ctx, u64 block, int device_number);
+static struct recover_stripe recover_from_stripe_to_new(struct insane_c *ctx, u64 block, int device_number);
+
 #define SUBSTRIPES 2      // Substripes in virtual stripe
 #define SUBSTRIPE_DATA 5  // Substripe length without parity
 #define E_BLOCKS 1        // Empty blocks count
@@ -15,7 +19,7 @@ struct insane_algorithm elegant_alg = {
 	.e_blocks   = E_BLOCKS,
 	.stripe_blocks = (SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1,
 	.map        = algorithm_elegant,
-        .recover    = elegant_recover,
+        .recover    = recover_from_stripe_to_empty,
 	.configure  = elegant_configure,
     	.module     = THIS_MODULE
 };
@@ -42,7 +46,7 @@ static struct parity_places algorithm_elegant( struct insane_c *ctx, u64 block, 
 	total_disks = elegant_alg.ndisks;
 
 	data_block = *device_number + block * total_disks;
-	dm_log("data_block: %lld\n", data_block);
+	//dm_log("data_block: %lld\n", data_block);
 	/*
 	 * Let's get position of block in VS.
 	 * SUBSTRIPE_DATA - quantity of data blocks in substripe;
@@ -134,9 +138,103 @@ static struct parity_places algorithm_elegant( struct insane_c *ctx, u64 block, 
 }
 
 
-// WITH EMPTY
-/*
-static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, int device_number) {
+static struct recover_stripe recover_from_stripe_to_empty(struct insane_c *ctx, u64 block, int device_number) {
+    struct recover_stripe result;
+
+    int total_disks, i, j, block_in_stripe;
+    u64 chunk_size, stripe_number, sector, substripe_number, empty_device;
+
+    total_disks = elegant_alg.ndisks;
+    chunk_size = ctx->chunk_size;
+
+    // calculating stripe number
+    stripe_number = block * total_disks + device_number;
+    block_in_stripe = sector_div(stripe_number, elegant_alg.stripe_blocks);
+
+    // GLOBAL SYNDROME case
+    if (block_in_stripe == elegant_alg.stripe_blocks - 1) {
+        substripe_number = 0;
+        for (i = 0; i < elegant_alg.stripe_blocks - 1 - SUBSTRIPES - E_BLOCKS; i++) {
+            // calculating substripe number for current block
+            substripe_number = substripe_number + i + 1;
+            sector_div(substripe_number, (SUBSTRIPE_DATA + 1));
+
+            // calculating read parameteres
+            sector = stripe_number * elegant_alg.stripe_blocks + i + substripe_number;
+            result.read_device[i] = sector_div(sector, total_disks);
+            result.read_sector[i] = sector * chunk_size;
+        }
+
+        result.quantity = elegant_alg.stripe_blocks - 1 - SUBSTRIPES - E_BLOCKS;
+        
+        /*
+        // we don't need to handle this event. 
+        // speed has top priority
+
+        if (device_number == 0) {
+            result.write_device = total_disks - 1;
+            result.write_device = read_sector[0];
+            return result;
+        }*/ 
+
+        result.write_device = device_number - 1;
+        result.write_sector = block * chunk_size;
+
+        return result;
+
+    }
+
+    // EMPTY BLOCK case
+    if (block_in_stripe == elegant_alg.stripe_blocks - 2) {
+        result.quantity = 0;
+        result.write_device = -1;
+        return result;
+    }
+
+    // other cases
+
+    substripe_number = 0;
+
+    // calculating stripe number
+    while (true) { 
+        if (block_in_stripe < (substripe_number + 1) * (SUBSTRIPE_DATA + 1))
+            break;
+            substripe_number++;
+    }
+
+    i = 0;
+    j = 0;
+
+    while (i < SUBSTRIPE_DATA + 1) {
+        if (i + substripe_number * (SUBSTRIPE_DATA + 1) != block_in_stripe) {
+
+            sector = stripe_number * elegant_alg.stripe_blocks + // block in previous stripes
+            substripe_number * (SUBSTRIPE_DATA + 1) + // blocks of previous substripes of current stripe
+            i; // block in current substripe
+            
+            result.read_device[j] = sector_div(sector, total_disks);
+            result.read_sector[j] = sector * chunk_size;
+
+            j++;
+        }
+        i++;
+    }
+
+    empty_device = device_number - block_in_stripe + elegant_alg.stripe_blocks - 2; // device with empty block
+
+    result.write_device = sector_div(empty_device, total_disks);
+
+    if (i < device_number)  // empty block is on the next stripe
+        result.write_sector = (block + 1) * chunk_size;
+    else                    // empty block in on the current stripe
+        result.write_sector = block * chunk_size;
+
+    result.quantity = SUBSTRIPE_DATA;
+
+    return result;
+}
+
+static struct recover_stripe recover_from_empty_to_new(struct insane_c *ctx, u64 block, int device_number) {
     struct recover_stripe result;
     
     int total_disks;
@@ -146,33 +244,34 @@ static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, in
     chunk_size = ctx->chunk_size;
 
     // calculating stripe number
-    stripe_number = block * total_disks + device_number;
-    sector_div(stripe_number, elegant_alg.stripe_blocks);
+    stripe_number = block * total_disks + device_number; // block in all RAID
+    sector_div(stripe_number, elegant_alg.stripe_blocks); // number of VS
     
-    read_sector = stripe_number * stripe_blocks + total_disks - 1;
+    read_sector = stripe_number * elegant_alg.stripe_blocks + total_disks - 1;
     result.read_device[0] = sector_div(read_sector, total_disks);
     read_sector *= chunk_size;
     
     result.read_sector[0] = read_sector;
    
+    result.write_device = device_number;
+    result.write_sector = block * chunk_size;
+
     result.quantity = 1;
 
     return result;
 }
-*/
 
-// WITHOUT EMPTY
-static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, int device_number) {
+static struct recover_stripe recover_from_stripe_to_new(struct insane_c *ctx, u64 block, int device_number) {
     struct recover_stripe result;
     
-    int total_disks, i, j, substripe_number, block_in_stripe;
-    u64 chunk_size, stripe_number, read_sector, sector;
+    int total_disks, i, j, block_in_stripe;
+    u64 chunk_size, stripe_number, sector, substripe_number;
 
     total_disks = elegant_alg.ndisks;
     chunk_size = ctx->chunk_size;
 
     // calculating stripe number
-    stripe_number = block * total_disks + device_number;
+    stripe_number = block * total_disks + device_number; // block in all RAID
     block_in_stripe = sector_div(stripe_number, elegant_alg.stripe_blocks);
     
     // GLOBAL SYNDROME case
@@ -180,10 +279,10 @@ static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, in
         substripe_number = 0;
         for (i = 0; i < elegant_alg.stripe_blocks - 1 - SUBSTRIPES; i++) {
             // calculating substripe number for current block
-            substripe_number += i;
-            sector_div(substripe_number, SUBSTRIPE_DATA);
-
-            // calculating some other shit
+            substripe_number = substripe_number + i + 1;
+            sector_div(substripe_number, (SUBSTRIPE_DATA + 1));
+            
+            // calculating read parameteres
             sector = stripe_number * elegant_alg.stripe_blocks + i + substripe_number;
             result.read_device[i] = sector_div(sector, total_disks);
 
@@ -199,17 +298,17 @@ static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, in
 
     substripe_number = 0;
 
-    while true {
-        if (block_in_stripe < (substripe_number + 1) * SUBSTRIPE_DATA)
+    while (true) {
+        if (block_in_stripe < (substripe_number + 1) * (SUBSTRIPE_DATA + 1))
             break;
         substripe_number++;
     }
 
     i = 0;
     j = 0;
-    while (i < (substripe_number + 1) * SUBSTRIPE_DATA) {
-        if (i + (substripe_number + 1) * SUBSTRIPE_DATA != block_in_stripe) {
-            sector = stripe_number * elegant_alg.stripe_blocks + i + (substripe_number + 1) * SUBSTRIPE_DATA;
+    while (i < SUBSTRIPE_DATA + 1) {
+        if (i + substripe_number * (SUBSTRIPE_DATA + 1) != block_in_stripe) {
+            sector = stripe_number * elegant_alg.stripe_blocks + i + substripe_number * (SUBSTRIPE_DATA + 1);
             result.read_device[j] = sector_div(sector, total_disks);
             result.read_sector[j] = sector * chunk_size;
             j++;
@@ -217,6 +316,9 @@ static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, in
         i++;
     }
 
+    result.write_device = device_number;
+    result.write_sector = block * chunk_size;
+    
     result.quantity = SUBSTRIPE_DATA;
 
     return result;

@@ -42,6 +42,7 @@ struct insane_c
 	int chunk_size_shift;
 	
 	int io_pattern;
+        int recovering_disk;
 
 	// RAID algorithm descriptor
 	struct insane_algorithm *alg;
@@ -55,12 +56,14 @@ struct insane_c
 const char *io_patterns[] = 
 {
 	"sequential",
-	"random"
+	"random",
+        "recover"
 };
 
 enum {
 	SEQUENTIAL = 0, 
 	RANDOM,
+	RECOVER,
 	IO_PATTERN_NUM
 };
 
@@ -74,11 +77,14 @@ struct parity_places
 	bool      last_block;
 };
 
+#define MAX_LENGTH 24 // timely
 struct recover_stripe
 {
     int         quantity;
-    int         read_dev[MAX_SYNDROMES];
-    sector_t    read_sector[MAX_SYNDROMES];
+    int         read_device[MAX_LENGTH];
+    sector_t    read_sector[MAX_LENGTH];
+    int         write_device;
+    sector_t    write_sector;
 };
 
 // RAID algorithm descriptor

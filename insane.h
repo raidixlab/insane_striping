@@ -83,11 +83,8 @@ struct recover_stripe
     int         quantity;
     int         read_device[MAX_LENGTH];
     sector_t    read_sector[MAX_LENGTH];
-<<<<<<< HEAD
     int         write_device;
     sector_t    write_sector;
-=======
->>>>>>> a65803664c6e0031eb3faa41911f98c5aed80f92
 };
 
 // RAID algorithm descriptor

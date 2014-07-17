@@ -63,6 +63,7 @@ const char *io_patterns[] =
 enum {
 	SEQUENTIAL = 0, 
 	RANDOM,
+	RECOVER,
 	IO_PATTERN_NUM
 };
 
@@ -82,6 +83,8 @@ struct recover_stripe
     int         quantity;
     int         read_device[MAX_LENGTH];
     sector_t    read_sector[MAX_LENGTH];
+    int         write_device;
+    sector_t    write_sector;
 };
 
 // RAID algorithm descriptor

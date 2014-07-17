@@ -168,6 +168,9 @@ static struct recover_stripe raid6_recover(struct insane_c *ctx, u64 block, int 
 	device = onotole;
     }
 
+    result.write_device = device_number;
+    result.write_sector = block * chunk_size;
+
     result.quantity = total_disks - 2;
     return result;
 }

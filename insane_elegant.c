@@ -4,14 +4,15 @@
 
 static struct parity_places algorithm_elegant( struct insane_c *ctx, u64 block, sector_t *sector, int *device_number );
 static int elegant_configure( struct insane_c *ctx );
+static struct recover_stripe elegant_recover(struct insane_c *ctx, u64 block, int device_number);
 
 static struct recover_stripe recover_from_stripe_to_empty(struct insane_c *ctx, u64 block, int device_number);
 static struct recover_stripe recover_from_empty_to_new(struct insane_c *ctx, u64 block, int device_number);
 static struct recover_stripe recover_from_stripe_to_new(struct insane_c *ctx, u64 block, int device_number);
 
 #define SUBSTRIPES 2      // Substripes in virtual stripe
-#define SUBSTRIPE_DATA 5  // Substripe length without parity
-#define E_BLOCKS 1        // Empty blocks count
+#define SUBSTRIPE_DATA 6  // Substripe length without parity
+#define E_BLOCKS 0        // Empty blocks count
 
 struct insane_algorithm elegant_alg = {
 	.name       = "elegant",
@@ -282,7 +283,11 @@ static struct recover_stripe recover_from_stripe_to_new(struct insane_c *ctx, u6
             substripe_number = substripe_number + i + 1;
             sector_div(substripe_number, (SUBSTRIPE_DATA + 1));
             
+<<<<<<< HEAD
             // calculating read parameteres
+=======
+            // calculating read paramateres
+>>>>>>> a65803664c6e0031eb3faa41911f98c5aed80f92
             sector = stripe_number * elegant_alg.stripe_blocks + i + substripe_number;
             result.read_device[i] = sector_div(sector, total_disks);
 

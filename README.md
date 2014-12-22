@@ -1,7 +1,7 @@
 About
 -----
 
-**instane_striping** - framework to build RAID devices with arbitrary data placement
+**insane_striping** - framework to build RAID devices with arbitrary data placement
 scheme. It allows you to create classic RAIDs with asymmetric data placement as
 well as exotic one like pyramid RAID.
 
@@ -42,6 +42,7 @@ Device creation
 
 1. Parse arguments - `ndev`, `chunk_size`, devices and new argument algorithm
    name, that must be supplied in `dmsetup` table.
+   Example of table-file: `0 688128 insane lrc 21 128 random /dev/sdb /dev/sdc ... /dev/sdv`
 2. Find algorithm by it's name in `alg_list`.
 3. Create insane context and save algorithm descriptor in context.
 
@@ -61,3 +62,11 @@ bio mapping
 4. `insane_map` will replace original bio sector and device and give it back to
    device mapper with `DM_MAPIO_REMAPPED`.
 
+LRC testing example
+-------------------
+
+1. Execute script `get_constants.py`. It will make configuration file `lrc_config.c`
+2. Build module with `make` command
+3. Insert module insane_striping.ko and module with algorithm
+4. Configure table-file
+5. Make device: `dmsetup create devname TABLE` 

@@ -4,19 +4,22 @@ def defines(scheme):
     i = 0
     sd = 0
     ss = 0
+    eb = 0
     while i < len(scheme):
         if (scheme[i] == '1'):
             sd += 1
         if (scheme[i].isdigit()):
             if int(scheme[i]) > ss:
                 ss += 1
+        if ((scheme[i] == 'e') or (scheme[i] == 'E')):
+            eb += 1
         i += 1
     
     dfns = []
 
     dfns.append('#define SUBSTRIPES ' + str(ss) + '\n')
     dfns.append('#define SUBSTRIPE_DATA ' + str(sd) + '\n')
-    dfns.append('#define E_BLOCKS 1\n')
+    dfns.append('#define E_BLOCKS ' + str(eb) + '\n')
 
     return dfns
 
@@ -102,7 +105,7 @@ def constants(scheme):
     cnstns.append('\n')
 
     cnstns.append('// it is place of global syndrome\n')
-    cnstns.append('const int lrc_gs =' + str(hex_scheme.index(hex(0xff))) + '\n')
+    cnstns.append('const int lrc_gs =' + str(hex_scheme.index(hex(0xff))) + ';\n')
 
     cnstns.append('// places of all local syndromes\n')
 
@@ -119,7 +122,7 @@ def constants(scheme):
     cnstns.append(st)
     
     cnstns.append('// empty place\n')
-    cnstns.append('const int lrc_eb =' + str(hex_scheme.index(hex(0xee))) + '\n')
+    cnstns.append('const int lrc_eb =' + str(hex_scheme.index(hex(0xee))) + ';\n')
 
     cnstns.append('// not-data blocks, ordered by increasing\n')
     st = ''
@@ -146,17 +149,11 @@ def get_scheme():
     return scheme
 
 def make_file(scheme):
-    with open('insane_LRC.c', 'r') as file:
-        lns = file.readlines()
-    strt = lns.index('// Do not touch this comment\n')
-    fnsh = lns.index('// Do not touch this comment too\n')
-
-    new_info = ['\n']
+    new_info = []
     new_info += defines(scheme)
     new_info += constants(scheme)
-    lns = lns[0:strt+1] + new_info + lns[fnsh:len(lns)-1]
-    with open('insane_LRC.c', 'w') as file:
-        file.writelines(lns)
+    with open('lrc_config.c', 'w') as file:
+        file.writelines(new_info)
     
 
 def main():

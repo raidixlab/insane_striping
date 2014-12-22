@@ -141,6 +141,7 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 
 
 	ndev = simple_strtoul( argv[1], &end, 10 );
+	dm_log("ndev: %d\n",ndev);
 	if ( *end || !ndev) {
 		ti->error = "Invalid device count";
 		return -EINVAL;
@@ -419,8 +420,8 @@ static int insane_map_special(struct insane_c *sc, struct bio *bio
 		target_request_nr = dm_bio_get_target_request_nr(bio);
 #else
 #if LINUX_VERSION_CODE > KERNEL_VERSION( 3, 8, 0 )
-		//target_request_nr = dm_bio_get_target_bio_nr(bio);
-		target_request_nr = dm_bio_get_target_request_nr(bio);
+		target_request_nr = dm_bio_get_target_bio_nr(bio);
+		//target_request_nr = dm_bio_get_target_request_nr(bio);
 #else // <= 3.7
 		target_request_nr = map_context->target_request_nr;
 #endif
@@ -441,8 +442,8 @@ static int insane_map_special(struct insane_c *sc, struct bio *bio
 		target_request_nr = dm_bio_get_target_request_nr(bio);
 #else
 #if LINUX_VERSION_CODE > KERNEL_VERSION( 3, 8, 0 )
-		//target_request_nr = dm_bio_get_target_bio_nr(bio);
-		target_request_nr = dm_bio_get_target_request_nr(bio);
+		target_request_nr = dm_bio_get_target_bio_nr(bio);
+		//target_request_nr = dm_bio_get_target_request_nr(bio);
 #else // <= 3.7
 		target_request_nr = map_context->target_request_nr;
 #endif

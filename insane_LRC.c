@@ -7,10 +7,6 @@ static int lrc_configure( struct insane_c *ctx );
 
 static struct recover_stripe recover_lrc(struct insane_c *ctx, u64 block, int device_number);
 
-#define SUBSTRIPES 3      // Substripes in virtual stripe
-#define SUBSTRIPE_DATA 5  // Substripe length without parity
-#define E_BLOCKS 1        // Empty blocks count
-
 
 /*
     I hope, that you do not have more than 16 groups.
@@ -26,23 +22,32 @@ static struct recover_stripe recover_lrc(struct insane_c *ctx, u64 block, int de
 
     You can use my amazing script to get all this constants easily (for the small number of groups)
 */  
-const unsigned char lrc_scheme[(SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1] = 
-{0x2, 0x1, 0x2, 0x1, 0x0, 0x2, 0x1, 0x1, 0x2, 0x2, 0xc0, 0xc1, 0xc2, 0x1, 0xee, 0x0, 0x0, 0x0, 0x0, 0xff};
+
+// Do not touch this comment
+
+#define SUBSTRIPES 3
+#define SUBSTRIPE_DATA 5
+#define E_BLOCKS 1
+
+const unsigned char lrc_scheme[(SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1] =
+{0x1, 0x2, 0x0, 0x2, 0x1, 0x1, 0x2, 0x2, 0x1, 0xc0, 0x2, 0xc1, 0xc2, 0x1, 0xee, 0x0, 0x0, 0x0, 0x0, 0xff};
 
 // it is just lrc_scheme without 0xee, 0xff and 0xcN
-const unsigned char lrc_data[SUBSTRIPE_DATA * SUBSTRIPES] = 
-{0x2, 0x1, 0x2, 0x1, 0x0, 0x2, 0x1, 0x1, 0x2, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0};
+const unsigned char lrc_data[SUBSTRIPE_DATA * SUBSTRIPES] =
+{0x1, 0x2, 0x0, 0x2, 0x1, 0x1, 0x2, 0x2, 0x1, 0x2, 0x1, 0x0, 0x0, 0x0, 0x0};
 
 // it is place of global syndrome
-const int lrc_gs = 19;
+const int lrc_gs =19
 // places of all local syndromes
-const int lrc_ls[SUBSTRIPES] = {10,11,12};
+const int lrc_ls[SUBSTRIPES] = {9,11,12};
 // empty place
-const int lrc_eb = 14;
+const int lrc_eb =14
 // not-data blocks, ordered by increasing
-const int lrc_offset[SUBSTRIPES + E_BLOCKS + 1] = {10,11,12,14,19};
+const int lrc_offset[SUBSTRIPES + E_BLOCKS + 1] = {9,11,12,14,19};
 // number of the last data block
-const int lrc_ldb = 18;
+const int lrc_ldb =18;
+
+// Do not touch this comment too
 
 struct insane_algorithm lrc_alg = {
 	.name       = "lrc",
@@ -292,4 +297,3 @@ module_init(insane_lrc_init);
 module_exit(insane_lrc_exit);
 
 MODULE_AUTHOR("Evgeniy Anastasiev");
-MODULE_LICENSE("GPL");

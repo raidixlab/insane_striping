@@ -1,15 +1,37 @@
 #!/bin/python
 
+def defines(scheme):
+    i = 0
+    sd = 0
+    ss = 0
+    while i < len(scheme):
+        if (scheme[i] == '1'):
+            sd += 1
+        if (scheme[i].isdigit()):
+            if int(scheme[i]) > ss:
+                ss += 1
+        i += 1
+    
+    dfns = []
+
+    dfns.append('#define SUBSTRIPES ' + str(ss) + '\n')
+    dfns.append('#define SUBSTRIPE_DATA ' + str(sd) + '\n')
+    dfns.append('#define E_BLOCKS 1\n')
+
+    return dfns
+
+
 def print_array(array):
     i = 0
     
-    print('{',end='')
+    st = '{'
     while i < len(array):
-        print(array[i],end='')
+        st += str(array[i])
         i += 1
         if i < len(array):
-            print(', ',end='')
-    print('};')
+            st += ', '
+    st += '};\n'
+    return st
 
 def get_hex_scheme(scheme):
     i = 0
@@ -65,59 +87,80 @@ def get_ldb(hex_scheme):
         i -= 1
     return i
 
-def print_all_this_shit(scheme):
-    print('')
-    print('')
-    print('const unsigned char lrc_scheme[(SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1] =')
+def constants(scheme):
+    cnstns = []
+    cnstns.append('\n')
+    cnstns.append('const unsigned char lrc_scheme[(SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1] =\n')
     hex_scheme = get_hex_scheme(scheme)
-    print_array(hex_scheme)
-    print('')
+    cnstns.append(print_array(hex_scheme))
+    cnstns.append('\n')
 
-    print('// it is just lrc_scheme without 0xee, 0xff and 0xcN')
-    print('const unsigned char lrc_data[SUBSTRIPE_DATA * SUBSTRIPES] =')
+    cnstns.append('// it is just lrc_scheme without 0xee, 0xff and 0xcN\n')
+    cnstns.append('const unsigned char lrc_data[SUBSTRIPE_DATA * SUBSTRIPES] =\n')
     data_scheme = get_data_scheme(hex_scheme)
-    print_array(data_scheme)
-    print('')
+    cnstns.append(print_array(data_scheme))
+    cnstns.append('\n')
 
-    print('// it is place of global syndrome')
-    print('const int lrc_gs =',hex_scheme.index(hex(0xff)))
+    cnstns.append('// it is place of global syndrome\n')
+    cnstns.append('const int lrc_gs =' + str(hex_scheme.index(hex(0xff))) + '\n')
 
-    print('// places of all local syndromes')
-    print('const int lrc_ls[SUBSTRIPES] = {',end='')
+    cnstns.append('// places of all local syndromes\n')
+
+    st = ''
+    st += 'const int lrc_ls[SUBSTRIPES] = {'
     ls = get_ls_places(hex_scheme)
     i = 0
     while i < len(ls):
-        print(ls[i],end='')
+        st += str(ls[i])
         i += 1
         if i < len(ls):
-            print(',',end='')
-    print('};')
+            st += ','
+    st += '};\n'
+    cnstns.append(st)
     
-    print('// empty place')
-    print('const int lrc_eb =',hex_scheme.index(hex(0xee)))
+    cnstns.append('// empty place\n')
+    cnstns.append('const int lrc_eb =' + str(hex_scheme.index(hex(0xee))) + '\n')
 
-    print('// not-data blocks, ordered by increasing')
-    print('const int lrc_offset[SUBSTRIPES + E_BLOCKS + 1] = {',end='')
+    cnstns.append('// not-data blocks, ordered by increasing\n')
+    st = ''
+    st += 'const int lrc_offset[SUBSTRIPES + E_BLOCKS + 1] = {'
     oo = ordered_offset(hex_scheme)
     i = 0
     while i < len(oo):
-        print(oo[i],end='')
+        st += str(oo[i])
         i += 1
         if i < len(oo):
-            print(',',end='')
-    print('};')
+            st += ','
+    st += '};\n'
+    cnstns.append(st)
     
-    print('// number of the last data block')
-    print('const int lrc_ldb =',get_ldb(hex_scheme),end='')
-    print(';')
+    cnstns.append('// number of the last data block\n')
+    cnstns.append('const int lrc_ldb =' + str(get_ldb(hex_scheme)) + ';\n')
+    cnstns.append('\n')
+
+    return cnstns
 
 def get_scheme():
     print('You can input numbers 1-9, letters "s","e","g" (or "S","E","G")')
     scheme = input('Input the scheme: ')
     return scheme
 
+def make_file(scheme):
+    with open('insane_LRC.c', 'r') as file:
+        lns = file.readlines()
+    strt = lns.index('// Do not touch this comment\n')
+    fnsh = lns.index('// Do not touch this comment too\n')
+
+    new_info = ['\n']
+    new_info += defines(scheme)
+    new_info += constants(scheme)
+    lns = lns[0:strt+1] + new_info + lns[fnsh:len(lns)-1]
+    with open('insane_LRC.c', 'w') as file:
+        file.writelines(lns)
+    
+
 def main():
     scheme = get_scheme()
-    print_all_this_shit(scheme)
+    make_file(scheme)
 
 main()

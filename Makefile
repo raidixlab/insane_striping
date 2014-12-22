@@ -1,4 +1,4 @@
-obj-m := insane_striping.o insane_raid6.o insane_raid6e.o insane_raid7.o insane_elegant.o insane_elegant_rebuilt.o insane_elegant_degraded.o
+obj-m := insane_striping.o insane_raid6.o insane_raid6e.o insane_raid7.o insane_LRC.o
 
 KDIR := /lib/modules/$(shell uname -r)/build
 

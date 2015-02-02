@@ -69,7 +69,7 @@ static void insane_recover(struct insane_c *ctx) {
 
     do_gettimeofday(&tv);
     start_time = tv.tv_sec;
-
+    
     for (i = 0; i < blocks_quantity; i++) {
 
         read_blocks = ctx->alg->recover(ctx, i, device_number);
@@ -79,6 +79,7 @@ static void insane_recover(struct insane_c *ctx) {
         if (read_blocks.write_device != -1)  // may be it is empty block
             do_bio(read_blocks.write_sector, ctx->devs[read_blocks.write_device].dev->bdev, bi_size, bi_vcnt, WRITE);
     }
+
     do_gettimeofday(&tv);
     finish_time = tv.tv_sec;
     difference = finish_time - start_time;
@@ -467,62 +468,51 @@ static void insane_bi_end_io( struct bio *bio, int err )
 	bio_put(bio);
 }
 
+static void insane_bio_split(sector_t sector, struct block_device *bdev, int split_number, int rw) 
+{
+    int i;
+    sector_t new_sector;
+    for (i = 0; i < split_number; i++) {
+        new_sector = sector + i*2048;
+        do_bio(new_sector, bdev, 1048576, 256, rw);
+        // 1048576 bytes = 512 * 2048 bytes. We can do bio maximum on 2048 sectors :(
+        // 256 pages = 1048576(bytes) / 4096(bytes per page). 4096 - constant size of memory page in Linux
+    }
+}
+
 static void do_bio( sector_t sector, struct block_device *bdev, int bi_size, int bi_vcnt, int rw )
 {
 	struct bio *bio;
 	struct page *parity_page;
 
 	int page_counter;
-	//int cur_len;
-	//int bio_added;
 
-	//bool remaining=true;
+        sector_t split_number;
+        
+        if (bi_vcnt > 256) {
+            split_number = bi_vcnt;
+            sector_div(split_number, 256);
+            insane_bio_split(sector, bdev, (int) split_number, rw);
+        } else {
+        
+    	    bio = bio_alloc(GFP_NOIO, bi_vcnt);
+    	    bio->bi_bdev = bdev;
+	    bio->bi_sector = sector;
+	    bio->bi_vcnt = bi_vcnt;
+	    bio->bi_size = bi_size;
+	    bio->bi_end_io = insane_bi_end_io;
+	    bio->bi_idx = 0;
 
-	
-	bio = bio_alloc(GFP_NOIO, bi_vcnt);
-	bio->bi_bdev = bdev;
-	bio->bi_sector = sector;
-	bio->bi_vcnt = bi_vcnt;
-	bio->bi_size = bi_size;
-	bio->bi_end_io = insane_bi_end_io;
-	bio->bi_idx = 0;
-
-	for (page_counter = 0; page_counter < bi_vcnt; page_counter++) 
-	{
+	    for (page_counter = 0; page_counter < bi_vcnt; page_counter++) 
+	    {
 		parity_page = alloc_page(GFP_KERNEL);
 		bio->bi_io_vec[page_counter].bv_len = PAGE_SIZE;
 		bio->bi_io_vec[page_counter].bv_page = parity_page;
 		bio->bi_io_vec[page_counter].bv_offset = 0;
-	}
-	/*
-	while (remaining) {
-		bio = bio_alloc(GFP_NOIO, bi_vcnt);
-		bio->bi_bdev = bdev;
-		bio->bi_sector = sector;
-		bio->bi_end_io = insane_bi_end_io;
-		for (page_counter = 0; bi_size > 0 && page_counter < bi_vcnt; page_counter++)
-		{
-			parity_page = alloc_page(GFP_KERNEL);
-			cur_len = bi_size > PAGE_SIZE ? PAGE_SIZE : bi_size;
-			bio_added = bio_add_page(bio, parity_page, bi_size, 0);
-			if (bio_added < bi_size) {
-				__free_page(parity_page);
-				//dm_log("Error! bi_size: %d; bio_added: %d, bi_vcnt: %d, page_counter: %d, bio->bi_size: %u\n", bi_size, bio_added, bi_vcnt, page_counter, bio->bi_size);
-				break;
-			}
-			bi_size -= cur_len;
-			if ((bi_size <= 0) || (page_counter >= bi_vcnt)) {
-				remaining = false;
-				break;
-			}
-		}
-		bio->bi_vcnt = page_counter;
-		submit_bio(rw,bio);
-	}
-	
-//			dm_log("All right! bi_size: %d; bio_added: %d, bi_vcnt: %d, page_counter: %d, bio->bi_size: %u\n", bi_size, bio_added, bi_vcnt, page_counter, bio->bi_size);
-	*/
-	submit_bio(rw, bio);
+	    }
+        
+	    submit_bio(rw, bio);
+        }
 }
 
 // Trace current LBA and submit syndrom update on stripe change.

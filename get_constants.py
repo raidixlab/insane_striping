@@ -5,6 +5,7 @@ def defines(scheme):
     sd = 0
     ss = 0
     eb = 0
+    gs = 0
     while i < len(scheme):
         if (scheme[i] == '1'):
             sd += 1
@@ -13,6 +14,8 @@ def defines(scheme):
                 ss += 1
         if ((scheme[i] == 'e') or (scheme[i] == 'E')):
             eb += 1
+        if ((scheme[i] == 'g') or (scheme[i] == 'G')):
+            gs += 1
         i += 1
     
     dfns = []
@@ -20,6 +23,7 @@ def defines(scheme):
     dfns.append('#define SUBSTRIPES ' + str(ss) + '\n')
     dfns.append('#define SUBSTRIPE_DATA ' + str(sd) + '\n')
     dfns.append('#define E_BLOCKS ' + str(eb) + '\n')
+    dfns.append('#define GLOBAL_S ' + str(gs) + '\n')
 
     return dfns
 
@@ -76,8 +80,11 @@ def get_ls_places(hex_scheme):
 def ordered_offset(hex_scheme):
     array = [];
     array[0:0] = (get_ls_places(hex_scheme))
-    array.append(hex_scheme.index(hex(0xee)))
-    array.append(hex_scheme.index(hex(0xff)))
+    i = 0
+    while i < len(hex_scheme):
+        if (hex_scheme[i][2] == 'e') or (hex_scheme[i][2] == 'f'):
+            array.append(i)
+        i += 1
     array.sort()
     return array
 
@@ -90,10 +97,19 @@ def get_ldb(hex_scheme):
         i -= 1
     return i
 
+def get_gs(hex_scheme):
+    i = 0
+    array = []
+    while i < len(hex_scheme):
+        if(hex_scheme[i][2] == 'f'):
+            array.append(i)
+        i += 1
+    return array
+        
 def constants(scheme):
     cnstns = []
     cnstns.append('\n')
-    cnstns.append('const unsigned char lrc_scheme[(SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1] =\n')
+    cnstns.append('const unsigned char lrc_scheme[(SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + GLOBAL_S] =\n')
     hex_scheme = get_hex_scheme(scheme)
     cnstns.append(print_array(hex_scheme))
     cnstns.append('\n')
@@ -105,7 +121,10 @@ def constants(scheme):
     cnstns.append('\n')
 
     cnstns.append('// it is place of global syndrome\n')
-    cnstns.append('const int lrc_gs =' + str(hex_scheme.index(hex(0xff))) + ';\n')
+    gs_array = get_gs(hex_scheme)
+    cnstns.append('const int lrc_gs[' + str(len(gs_array)) +  '] =\n')
+    cnstns.append(print_array(gs_array))
+    cnstns.append('\n')
 
     cnstns.append('// places of all local syndromes\n')
 
@@ -126,7 +145,7 @@ def constants(scheme):
 
     cnstns.append('// not-data blocks, ordered by increasing\n')
     st = ''
-    st += 'const int lrc_offset[SUBSTRIPES + E_BLOCKS + 1] = {'
+    st += 'const int lrc_offset[SUBSTRIPES + E_BLOCKS + GLOBAL_S] = {'
     oo = ordered_offset(hex_scheme)
     i = 0
     while i < len(oo):

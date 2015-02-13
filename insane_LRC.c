@@ -11,9 +11,9 @@ static struct recover_stripe recover_lrc(struct insane_c *ctx, u64 block, int de
 
 struct insane_algorithm lrc_alg = {
 	.name       = "lrc",
-	.p_blocks   = SUBSTRIPES + 1,
+	.p_blocks   = SUBSTRIPES + GLOBAL_S,
 	.e_blocks   = E_BLOCKS,
-	.stripe_blocks = (SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + 1,
+	.stripe_blocks = (SUBSTRIPE_DATA + 1) * SUBSTRIPES + E_BLOCKS + GLOBAL_S,
 	.map        = algorithm_lrc,
         .recover    = recover_lrc,
 	.configure  = lrc_configure,
@@ -36,7 +36,7 @@ static struct parity_places algorithm_lrc( struct insane_c *ctx, u64 block, sect
 	sector_t local_parity, global_parity;
 	int block_size;
 	int total_disks;
-	int i;
+	int i,j;
         unsigned char group;
 
 	block_size = ctx->chunk_size;
@@ -60,7 +60,7 @@ static struct parity_places algorithm_lrc( struct insane_c *ctx, u64 block, sect
         group = lrc_data[vs_position];
         local_parity = lrc_ls[group];
 	local_parity = (virtual_stripe * lrc_alg.stripe_blocks) + local_parity;
-	global_parity = virtual_stripe * lrc_alg.stripe_blocks + lrc_gs;
+	//global_parity = virtual_stripe * lrc_alg.stripe_blocks + lrc_gs;
 	
 	// Parity in sequential	mode
 	if (ctx->io_pattern == SEQUENTIAL)
@@ -78,15 +78,20 @@ static struct parity_places algorithm_lrc( struct insane_c *ctx, u64 block, sect
 				parity.sector_number[i] = parity.start_sector;
 			}
 		}
-                // global syndrome
-		parity.device_number[i] = (parity.start_device + lrc_gs) % ctx->ndev;
-		if (parity.device_number[i] < parity.start_device) {
+                // global syndromes
+                for (j = 0; i < SUBSTRIPES + GLOBAL_S; i++) {
+    		    parity.device_number[i] = (parity.start_device + lrc_gs[j]) % ctx->ndev;
+
+		    if (parity.device_number[i] < parity.start_device) {
 			parity.sector_number[i] = parity.start_sector + ctx->chunk_size;
-		} else {
-			parity.sector_number[i] = parity.start_sector;
-		}
+        	    } else {
+	    		parity.sector_number[i] = parity.start_sector;
+	            }
+                    
+                    j++;
+                }
                 // breakpoint
-		parity.device_number[i+1] = -1;
+		parity.device_number[i] = -1;
 	
 		last_block = parity.start_device + lrc_ldb;
 		i = sector_div(last_block, total_disks);
@@ -95,12 +100,16 @@ static struct parity_places algorithm_lrc( struct insane_c *ctx, u64 block, sect
 	// Parity in random mode
 	else {	
 		parity.device_number[0] = sector_div(local_parity, total_disks);
-		parity.device_number[1] = sector_div(global_parity, total_disks);
-
 		parity.sector_number[0] = local_parity * block_size;
-		parity.sector_number[1] = global_parity * block_size;
+
+                for (i = 0; i < GLOBAL_S; i++) {
+                    global_parity = virtual_stripe * lrc_alg.stripe_blocks + lrc_gs[i];
+                    parity.device_number[i+1] = sector_div(global_parity, total_disks);
+                    parity.sector_number[i+1] = global_parity * block_size;    
+                }
+
 	        //breakpoint
-		parity.device_number[2] = -1;
+                parity.device_number[i+1] = -1;
 
 		parity.start_sector = virtual_stripe * lrc_alg.stripe_blocks;
 		parity.start_device = sector_div(parity.start_sector, total_disks);
@@ -109,12 +118,12 @@ static struct parity_places algorithm_lrc( struct insane_c *ctx, u64 block, sect
 
 	// Okay, let's return to counting position of data block
 	// now we can calculate global_gap...
-	global_gap = virtual_stripe * (SUBSTRIPES + lrc_alg.e_blocks + 1);
+	global_gap = virtual_stripe * (SUBSTRIPES + E_BLOCKS + GLOBAL_S);
 	
 	// ...and local_gap
 	local_gap = vs_position;
         i = 0;
-        while (i < SUBSTRIPES + E_BLOCKS + 1) {
+        while (i < SUBSTRIPES + E_BLOCKS + GLOBAL_S) {
             if (local_gap >= lrc_offset[i]) {
                 local_gap++;
             }
@@ -150,6 +159,8 @@ static struct recover_stripe recover_lrc(struct insane_c *ctx, u64 block, int de
     int total_disks, i, j, block_in_stripe;
     u64 chunk_size, stripe_number, sector, substripe_number, empty_device;
 
+    bool gs;
+
     unsigned char pattern;
 
     total_disks = lrc_alg.ndisks;
@@ -160,7 +171,15 @@ static struct recover_stripe recover_lrc(struct insane_c *ctx, u64 block, int de
     block_in_stripe = sector_div(stripe_number, lrc_alg.stripe_blocks);
 
     // GLOBAL SYNDROME case
-    if (block_in_stripe == lrc_gs) {
+    gs = false;
+    for (i = 0; i < GLOBAL_S; i++) {
+        if (block_in_stripe == lrc_gs[i]) {
+            gs = true;
+            break;
+        }
+    }
+
+    if (gs) {
         substripe_number = 0;
         j = 0;
         for (i = 0; i < lrc_alg.stripe_blocks; i++) {
@@ -173,17 +192,17 @@ static struct recover_stripe recover_lrc(struct insane_c *ctx, u64 block, int de
             }
         }
 
-        result.quantity = lrc_alg.stripe_blocks - 1 - SUBSTRIPES - E_BLOCKS;
+        result.quantity = lrc_alg.stripe_blocks - GLOBAL_S - SUBSTRIPES - E_BLOCKS;
         
-        result.write_device = device_number - lrc_gs + lrc_eb;
+        result.write_device = device_number - block_in_stripe + lrc_eb;
         result.write_sector = block * chunk_size;
         
         // it is possible to comment this clause, if you have checked your scheme
         if (result.write_device < 0) {
             result.write_device += total_disks;
-            result.write_sector = result.read_sector[0];
+            result.write_sector -= chunk_size;
         }
-
+	
         return result;
 
     }
@@ -222,7 +241,7 @@ static struct recover_stripe recover_lrc(struct insane_c *ctx, u64 block, int de
         result.write_sector = (block + 1) * chunk_size;
     else                    // empty block in on the current lane
         result.write_sector = block * chunk_size;
-
+	
     result.quantity = SUBSTRIPE_DATA;
         
     return result;
@@ -257,3 +276,4 @@ module_init(insane_lrc_init);
 module_exit(insane_lrc_exit);
 
 MODULE_AUTHOR("Evgeniy Anastasiev");
+MODULE_LICENSE("GPL");

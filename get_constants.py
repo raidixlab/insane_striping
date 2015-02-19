@@ -1,23 +1,12 @@
 #!/bin/python
 
+# Эта функция формирует все define'ы для файла lrc_config.c
 def defines(scheme):
-    i = 0
-    sd = 0
-    ss = 0
-    eb = 0
-    gs = 0
-    while i < len(scheme):
-        if (scheme[i] == '1'):
-            sd += 1
-        if (scheme[i].isdigit()):
-            if int(scheme[i]) > ss:
-                ss += 1
-        if ((scheme[i] == 'e') or (scheme[i] == 'E')):
-            eb += 1
-        if ((scheme[i] == 'g') or (scheme[i] == 'G')):
-            gs += 1
-        i += 1
-    
+    sd = scheme.count('1') - 1
+    ss = scheme.count('s') + scheme.count('S')
+    eb = scheme.count('e') + scheme.count('E')
+    gs = scheme.count('g') + scheme.count('G')
+
     dfns = []
 
     dfns.append('#define SUBSTRIPES ' + str(ss) + '\n')
@@ -27,45 +16,50 @@ def defines(scheme):
 
     return dfns
 
-
+# Вспомогательная функция вывода массива в годном для C виде
 def print_array(array):
-    i = 0
-    
     st = '{'
-    while i < len(array):
-        st += str(array[i])
-        i += 1
-        if i < len(array):
-            st += ', '
-    st += '};\n'
+
+    for i in array: 
+        st += str(i)
+        st += ', '
+    
+    st = st[:-2] + '};\n' # Стираем последнюю запятую и добавляем фигурную скобку
     return st
+
+# Эта функция переводит введенную схему в 
+# схему, понятную сишному модулю.
 
 def get_hex_scheme(scheme):
     i = 0
-    syndromes = 0;
     array = []
+
+    # Здесь такой дурной цикл по той причине, что в локальном
+    # синдроме требуется обрабатывать два символа за раз
     while i < len(scheme):
-        if scheme[i].isdigit():
+        if scheme[i].isdigit():                                 # Блок данных
             array.append(hex(int(scheme[i]) - 1))
         else:
-            if ((scheme[i] == 's') or (scheme[i] == 'S')):
-                array.append(hex(192 + syndromes))
-                syndromes += 1
-            elif ((scheme[i] == 'e') or (scheme[i] == 'E')):
+            if ((scheme[i] == 's') or (scheme[i] == 'S')):      # Локальный синдром
+                array.append(hex(191 + int(scheme[i+1])))
+                i += 1
+            elif ((scheme[i] == 'e') or (scheme[i] == 'E')):    # Empty-block
                 array.append(hex(0xee))
-            else:
+            else:                                               # Глобальный синдром
                 array.append(hex(0xff))
         i += 1
     return array
 
+# Следующие 5 функций нужны специально для того,
+# чтобы формировать некоторые переменные для файла.
+
 def get_data_scheme(hex_scheme):
-    i = 0
     array = []
-    while i < len(hex_scheme):
-        fs = hex_scheme[i][2]
+
+    for i in hex_scheme:
+        fs = i[2]
         if ((fs != 'c') and (fs != 'e') and (fs != 'f')):
-            array.append(hex_scheme[i])
-        i += 1
+            array.append(i)
     return array
 
 def get_ls_places(hex_scheme):
@@ -77,14 +71,21 @@ def get_ls_places(hex_scheme):
         i += 1
     return array
 
-def ordered_offset(hex_scheme):
-    array = [];
-    array[0:0] = (get_ls_places(hex_scheme))
+def get_gs(hex_scheme):
     i = 0
+    array = []
     while i < len(hex_scheme):
-        if (hex_scheme[i][2] == 'e') or (hex_scheme[i][2] == 'f'):
+        if(hex_scheme[i][2] == 'f'):
             array.append(i)
         i += 1
+    return array
+
+def ordered_offset(hex_scheme):
+    array = []
+    array[0:0] = (get_ls_places(hex_scheme))    # Сперва получим локальные синдромы
+    array[1:1] = (get_gs(hex_scheme))           # Потом глобальные
+    array.append(hex_scheme.index(hex(0xee)))   # А потом empty-block
+
     array.sort()
     return array
 
@@ -97,15 +98,9 @@ def get_ldb(hex_scheme):
         i -= 1
     return i
 
-def get_gs(hex_scheme):
-    i = 0
-    array = []
-    while i < len(hex_scheme):
-        if(hex_scheme[i][2] == 'f'):
-            array.append(i)
-        i += 1
-    return array
         
+
+# Эта функция формирует основной массив строк файла lrc_config.c, ее можно не трогать
 def constants(scheme):
     cnstns = []
     cnstns.append('\n')
@@ -122,54 +117,38 @@ def constants(scheme):
 
     cnstns.append('// it is place of global syndrome\n')
     gs_array = get_gs(hex_scheme)
-    cnstns.append('const int lrc_gs[' + str(len(gs_array)) +  '] =\n')
+    cnstns.append('const int lrc_gs[GLOBAL_S] = ')
     cnstns.append(print_array(gs_array))
     cnstns.append('\n')
 
     cnstns.append('// places of all local syndromes\n')
-
-    st = ''
-    st += 'const int lrc_ls[SUBSTRIPES] = {'
+    cnstns.append('const int lrc_ls[SUBSTRIPES] = ')
     ls = get_ls_places(hex_scheme)
-    i = 0
-    while i < len(ls):
-        st += str(ls[i])
-        i += 1
-        if i < len(ls):
-            st += ','
-    st += '};\n'
-    cnstns.append(st)
+    cnstns.append(print_array(ls))
     
     cnstns.append('// empty place\n')
-    cnstns.append('const int lrc_eb =' + str(hex_scheme.index(hex(0xee))) + ';\n')
+    cnstns.append('const int lrc_eb = ' + str(hex_scheme.index(hex(0xee))) + ';\n')
 
     cnstns.append('// not-data blocks, ordered by increasing\n')
-    st = ''
-    st += 'const int lrc_offset[SUBSTRIPES + E_BLOCKS + GLOBAL_S] = {'
+    cnstns.append('const int lrc_offset[SUBSTRIPES + E_BLOCKS + GLOBAL_S] = ')
     oo = ordered_offset(hex_scheme)
-    i = 0
-    while i < len(oo):
-        st += str(oo[i])
-        i += 1
-        if i < len(oo):
-            st += ','
-    st += '};\n'
-    cnstns.append(st)
+    cnstns.append(print_array(oo))
     
     cnstns.append('// number of the last data block\n')
-    cnstns.append('const int lrc_ldb =' + str(get_ldb(hex_scheme)) + ';\n')
+    cnstns.append('const int lrc_ldb = ' + str(get_ldb(hex_scheme)) + ';\n')
     cnstns.append('\n')
 
     return cnstns
 
+# Вот эту штуку надо бы переписать, чтобы схема задавалась не input'ом.
 def get_scheme():
     print('You can input numbers 1-9, letters "s","e","g" (or "S","E","G")')
     scheme = input('Input the scheme: ')
     return scheme
 
+
 def make_file(scheme):
-    new_info = []
-    new_info += defines(scheme)
+    new_info = defines(scheme)
     new_info += constants(scheme)
     with open('lrc_config.c', 'w') as file:
         file.writelines(new_info)

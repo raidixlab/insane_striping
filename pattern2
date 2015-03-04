@@ -1,0 +1,50 @@
+[devices]
+/dev/sda /dev/sdb /dev/sdo /dev/sdp /dev/sdq /dev/sdr /dev/sdu /dev/sdc /dev/sdd /dev/sdf /dev/sdg /dev/sdj /dev/sdh /dev/sdl /dev/sdi /dev/sdm /dev/sdn /dev/sdt /dev/sde /dev/sdv /dev/sdk /dev/sdw /dev/sds /dev/sdx
+
+[volume]
+10G
+
+[block_sizes]
+64 128 256 512 1024 2048 4096 8192
+
+[tests]
+# 
+# disks     algorithm   options
+# options can be:
+#
+# lrc:
+#   scheme=<scheme>
+#   OR
+#   groups=<subgroups>
+#   length=<subgroup_length>
+#   global_s=<global_syndromes>
+#   
+#   default global_s = 1
+#   
+# Other algorithms:
+#   no special options yet
+#
+#
+24 lrc scheme=111111s1222222s2333333s3eg
+24 lrc groups=3 length=7
+24 raid6
+24 raid7
+
+23 lrc scheme=111111111s1222222222s2eg
+23 lrc groups=2 length=10
+23 raid6
+23 raid7
+
+21 lrc scheme=11111s122222s233333s3eg
+21 lrc groups=3 length=6
+21 lrc scheme=11111111s122222222s2eg
+21 lrc groups=2 length=9
+21 raid6
+21 raid7
+
+15 lrc scheme=11111s122222s2eg
+15 lrc groups=2 length=6
+15 lrc scheme=111s1222s2333s3eg
+15 lrc groups=3 length=4
+15 raid6
+15 raid7

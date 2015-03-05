@@ -1,0 +1,9 @@
+#!/bin/bash
+dmsetup remove disk1 &&
+rmmod insane_raid7 &&
+#rmmod insane_raid6e &&
+#rmmod insane_elegant_rebuilt &&
+#rmmod insane_elegant &&
+rmmod insane_lrc &&
+rmmod insane_raid6
+#rmmod insane_striping

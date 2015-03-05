@@ -1,0 +1,10 @@
+#!/bin/bash
+make &&
+insmod insane_striping.ko 
+insmod insane_raid6.ko &&
+insmod insane_lrc.ko &&
+#insmod insane_elegant.ko &&
+#insmod insane_elegant_rebuilt.ko &&
+#insmod insane_raid6e.ko &&
+insmod insane_raid7.ko &&
+dmsetup create disk1 TABLE

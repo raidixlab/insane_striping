@@ -301,7 +301,9 @@ static int insane_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	dm_log("Insane constructor: %u devices, %lld device width, %u chunk size\n", 
 		sc->ndev, (u64)sc->dev_width, sc->chunk_size);
 
-        insane_recover(sc);
+        if ( io_pattern == IO_PATTERN_NUM - 1) { // recover mode
+            insane_recover(sc);
+        }
 	return 0;
 }
 
